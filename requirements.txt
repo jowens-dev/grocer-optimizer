@@ -1,0 +1,4 @@
+fastapi
+uvicorn[standard]
+pydantic
+sqlite3  # built-in; don't include in pip list

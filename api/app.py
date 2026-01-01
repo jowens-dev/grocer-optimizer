@@ -1,0 +1,282 @@
+# app.py (Enhanced FastAPI)
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
+from typing import List, Dict, Any, Optional, Literal
+from utils.db_helpers import get_conn
+from utils.normalize import canonicalize
+import math
+
+app = FastAPI(title="Grocery Price Optimizer (proto)")
+
+class ItemRequest(BaseModel):
+    items: List[str]
+    mode: Literal["single_store", "minimize_visits", "maximize_savings"] = "maximize_savings"
+    max_distance_miles: Optional[float] = None
+    preferred_stores: Optional[List[str]] = None
+
+@app.post("/cheapest")
+def cheapest_list(req: ItemRequest):
+    conn = get_conn()
+    cur = conn.cursor()
+    
+    if req.mode == "single_store":
+        return _single_store_optimization(cur, req)
+    elif req.mode == "minimize_visits":
+        return _minimize_visits_optimization(cur, req)
+    else:  # maximize_savings
+        return _maximize_savings_optimization(cur, req)
+
+def _single_store_optimization(cur, req: ItemRequest):
+    """Find the best single store for all items"""
+    store_scores = {}
+    item_availability = {}
+    
+    for raw_item in req.items:
+        canonical = canonicalize(raw_item)
+        
+        # Get all available prices for this item
+        query = """
+            SELECT s.store_name, s.distance_miles, p.price, p.raw_name, p.date_collected
+            FROM prices p
+            JOIN stores s ON p.store_id = s.id
+            WHERE p.product_variant_id = (
+                SELECT id FROM products WHERE canonical_name = ?
+            )
+        """
+        params = [canonical]
+        
+        # Apply distance filter
+        if req.max_distance_miles:
+            query += " AND s.distance_miles <= ?"
+            params.append(req.max_distance_miles)
+            
+        # Apply preferred stores filter
+        if req.preferred_stores:
+            placeholders = ",".join("?" * len(req.preferred_stores))
+            query += f" AND s.store_name IN ({placeholders})"
+            params.extend(req.preferred_stores)
+            
+        query += " ORDER BY p.price ASC"
+        
+        cur.execute(query, params)
+        rows = cur.fetchall()
+        
+        item_availability[canonical] = {}
+        for row in rows:
+            store_name = row["store_name"]
+            if store_name not in item_availability[canonical]:
+                item_availability[canonical][store_name] = {
+                    "price": row["price"],
+                    "raw_name": row["raw_name"],
+                    "date_collected": row["date_collected"],
+                    "distance": row["distance_miles"]
+                }
+    
+    # Calculate store scores (lower is better)
+    for store_name in set().union(*[stores.keys() for stores in item_availability.values()]):
+        total_cost = 0
+        items_available = 0
+        
+        for canonical, stores in item_availability.items():
+            if store_name in stores:
+                total_cost += stores[store_name]["price"]
+                items_available += 1
+        
+        # Penalize stores that don't have all items
+        availability_penalty = (len(req.items) - items_available) * 1000
+        store_scores[store_name] = total_cost + availability_penalty
+    
+    if not store_scores:
+        return {"error": "No stores found matching criteria"}
+    
+    # Select best store
+    best_store = min(store_scores.keys(), key=lambda x: store_scores[x])
+    
+    # Build results for best store
+    results = []
+    total_cost = 0
+    
+    for raw_item in req.items:
+        canonical = canonicalize(raw_item)
+        if canonical in item_availability and best_store in item_availability[canonical]:
+            item_data = item_availability[canonical][best_store]
+            results.append({
+                "query": raw_item,
+                "canonical": canonical,
+                "store": best_store,
+                "price": item_data["price"],
+                "raw_name": item_data["raw_name"],
+                "date_collected": item_data["date_collected"]
+            })
+            total_cost += item_data["price"]
+        else:
+            results.append({
+                "query": raw_item,
+                "canonical": canonical,
+                "store": None,
+                "price": None,
+                "note": "Not available at selected store"
+            })
+    
+    return {
+        "mode": "single_store",
+        "selected_store": best_store,
+        "items": results,
+        "total_cost": total_cost,
+        "stores_used": [best_store]
+    }
+
+def _minimize_visits_optimization(cur, req: ItemRequest):
+    """Minimize number of stores while keeping costs reasonable"""
+    # First get all item-store combinations
+    item_store_prices = {}
+    
+    for raw_item in req.items:
+        canonical = canonicalize(raw_item)
+        
+        query = """
+            SELECT s.store_name, s.distance_miles, p.price, p.raw_name, p.date_collected
+            FROM prices p
+            JOIN stores s ON p.store_id = s.id
+            WHERE p.product_variant_id = (
+                SELECT id FROM products WHERE canonical_name = ?
+            )
+        """
+        params = [canonical]
+        
+        if req.max_distance_miles:
+            query += " AND s.distance_miles <= ?"
+            params.append(req.max_distance_miles)
+            
+        if req.preferred_stores:
+            placeholders = ",".join("?" * len(req.preferred_stores))
+            query += f" AND s.store_name IN ({placeholders})"
+            params.extend(req.preferred_stores)
+            
+        query += " ORDER BY p.price ASC"
+        
+        cur.execute(query, params)
+        rows = cur.fetchall()
+        
+        item_store_prices[canonical] = {
+            "raw_item": raw_item,
+            "stores": {}
+        }
+        
+        for row in rows:
+            item_store_prices[canonical]["stores"][row["store_name"]] = {
+                "price": row["price"],
+                "raw_name": row["raw_name"],
+                "date_collected": row["date_collected"]
+            }
+    
+    # Greedy algorithm: pick stores that cover most items at reasonable prices
+    selected_items = {}
+    stores_used = set()
+    
+    while len(selected_items) < len(req.items):
+        best_store = None
+        best_score = float('-inf')
+        
+        # Calculate score for each store (items covered / cost ratio)
+        for store_name in set().union(*[item["stores"].keys() for item in item_store_prices.values()]):
+            if store_name in stores_used:
+                continue
+                
+            items_covered = 0
+            total_cost = 0
+            
+            for canonical, item_data in item_store_prices.items():
+                if canonical not in selected_items and store_name in item_data["stores"]:
+                    items_covered += 1
+                    total_cost += item_data["stores"][store_name]["price"]
+            
+            if items_covered > 0:
+                score = items_covered / (total_cost + 1)  # +1 to avoid division by zero
+                if score > best_score:
+                    best_score = score
+                    best_store = store_name
+        
+        if best_store:
+            stores_used.add(best_store)
+            # Add items from this store
+            for canonical, item_data in item_store_prices.items():
+                if canonical not in selected_items and best_store in item_data["stores"]:
+                    selected_items[canonical] = {
+                        "store": best_store,
+                        "data": item_data["stores"][best_store],
+                        "raw_item": item_data["raw_item"]
+                    }
+        else:
+            break
+    
+    # Build results
+    results = []
+    store_totals = {}
+    total_cost = 0
+    
+    for raw_item in req.items:
+        canonical = canonicalize(raw_item)
+        if canonical in selected_items:
+            item = selected_items[canonical]
+            store = item["store"]
+            price = item["data"]["price"]
+            
+            results.append({
+                "query": raw_item,
+                "canonical": canonical,
+                "store": store,
+                "price": price,
+                "raw_name": item["data"]["raw_name"],
+                "date_collected": item["data"]["date_collected"]
+            })
+            
+            store_totals[store] = store_totals.get(store, 0) + price
+            total_cost += price
+        else:
+            results.append({
+                "query": raw_item,
+                "canonical": canonical,
+                "store": None,
+                "price": None,
+                "note": "Not available in selected stores"
+            })
+    
+    return {
+        "mode": "minimize_visits",
+        "items": results,
+        "stores_used": list(stores_used),
+        "store_totals": store_totals,
+        "total_cost": total_cost,
+        "num_stores": len(stores_used)
+    }
+
+def _maximize_savings_optimization(cur, req: ItemRequest):
+    """Original logic - find absolute cheapest for each item"""
+    results = []
+    store_totals = {}
+    stores_used = set()
+    
+    for raw_item in req.items:
+        canonical = canonicalize(raw_item)
+        
+        query = """
+            SELECT s.store_name, s.distance_miles, p.price, p.raw_name, p.date_collected
+            FROM prices p
+            JOIN stores s ON p.store_id = s.id
+            WHERE p.product_variant_id = (
+                SELECT id FROM products WHERE canonical_name = ?
+            )
+        """
+        params = [canonical]
+        
+        if req.max_distance_miles:
+            query += " AND s.distance_miles <= ?"
+            params.append(req.max_distance_miles)
+            
+        if req.preferred_stores:
+            placeholders = ",".join("?" * len(req.preferred_stores))
+            query += f" AND s.store_name IN ({placeholders})"
+            params.extend(req.preferred_stores)
+            
+        query += " ORDER BY p.
