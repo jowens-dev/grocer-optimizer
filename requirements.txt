@@ -1,4 +1,4 @@
 fastapi
-uvicorn[standard]
+uvicorn
 pydantic
-sqlite3  # built-in; don't include in pip list
+rapidfuzz>=3.0.0

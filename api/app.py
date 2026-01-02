@@ -1,21 +1,21 @@
+
 # app.py (Enhanced FastAPI)
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from typing import List, Dict, Any, Optional, Literal
 from utils.db_helpers import get_conn
 from utils.normalize import canonicalize
-import math
 
-app = FastAPI(title="Grocery Price Optimizer (proto)")
+app = FastAPI(title="Grocery Price Optimizer")
 
 class ItemRequest(BaseModel):
     items: List[str]
     mode: Literal["single_store", "minimize_visits", "maximize_savings"] = "maximize_savings"
-    max_distance_miles: Optional[float] = None
     preferred_stores: Optional[List[str]] = None
 
 @app.post("/cheapest")
 def cheapest_list(req: ItemRequest):
+    """Find the cheapest way to buy a list of items"""
     conn = get_conn()
     cur = conn.cursor()
     
@@ -32,24 +32,19 @@ def _single_store_optimization(cur, req: ItemRequest):
     item_availability = {}
     
     for raw_item in req.items:
-        canonical = canonicalize(raw_item)
+        canonical, confidence_score = canonicalize(raw_item)
         
         # Get all available prices for this item
         query = """
-            SELECT s.store_name, s.distance_miles, p.price, p.raw_name, p.date_collected
+            SELECT s.store_name, p.price, pv.raw_name, p.date_collected
             FROM prices p
             JOIN stores s ON p.store_id = s.id
-            WHERE p.product_variant_id = (
-                SELECT id FROM products WHERE canonical_name = ?
-            )
+            JOIN product_variants pv ON p.product_variant_id = pv.id
+            JOIN products prod ON pv.product_id = prod.id
+            WHERE prod.canonical_name = ?
         """
         params = [canonical]
         
-        # Apply distance filter
-        if req.max_distance_miles:
-            query += " AND s.distance_miles <= ?"
-            params.append(req.max_distance_miles)
-            
         # Apply preferred stores filter
         if req.preferred_stores:
             placeholders = ",".join("?" * len(req.preferred_stores))
@@ -69,7 +64,7 @@ def _single_store_optimization(cur, req: ItemRequest):
                     "price": row["price"],
                     "raw_name": row["raw_name"],
                     "date_collected": row["date_collected"],
-                    "distance": row["distance_miles"]
+                    "confidence_score": confidence_score
                 }
     
     # Calculate store scores (lower is better)
@@ -97,12 +92,13 @@ def _single_store_optimization(cur, req: ItemRequest):
     total_cost = 0
     
     for raw_item in req.items:
-        canonical = canonicalize(raw_item)
+        canonical, confidence_score = canonicalize(raw_item)
         if canonical in item_availability and best_store in item_availability[canonical]:
             item_data = item_availability[canonical][best_store]
             results.append({
                 "query": raw_item,
                 "canonical": canonical,
+                "confidence_score": confidence_score,
                 "store": best_store,
                 "price": item_data["price"],
                 "raw_name": item_data["raw_name"],
@@ -113,6 +109,7 @@ def _single_store_optimization(cur, req: ItemRequest):
             results.append({
                 "query": raw_item,
                 "canonical": canonical,
+                "confidence_score": confidence_score,
                 "store": None,
                 "price": None,
                 "note": "Not available at selected store"
@@ -128,26 +125,21 @@ def _single_store_optimization(cur, req: ItemRequest):
 
 def _minimize_visits_optimization(cur, req: ItemRequest):
     """Minimize number of stores while keeping costs reasonable"""
-    # First get all item-store combinations
     item_store_prices = {}
     
     for raw_item in req.items:
-        canonical = canonicalize(raw_item)
+        canonical, confidence_score = canonicalize(raw_item)
         
         query = """
-            SELECT s.store_name, s.distance_miles, p.price, p.raw_name, p.date_collected
+            SELECT s.store_name, p.price, pv.raw_name, p.date_collected
             FROM prices p
             JOIN stores s ON p.store_id = s.id
-            WHERE p.product_variant_id = (
-                SELECT id FROM products WHERE canonical_name = ?
-            )
+            JOIN product_variants pv ON p.product_variant_id = pv.id
+            JOIN products prod ON pv.product_id = prod.id
+            WHERE prod.canonical_name = ?
         """
         params = [canonical]
         
-        if req.max_distance_miles:
-            query += " AND s.distance_miles <= ?"
-            params.append(req.max_distance_miles)
-            
         if req.preferred_stores:
             placeholders = ",".join("?" * len(req.preferred_stores))
             query += f" AND s.store_name IN ({placeholders})"
@@ -160,6 +152,7 @@ def _minimize_visits_optimization(cur, req: ItemRequest):
         
         item_store_prices[canonical] = {
             "raw_item": raw_item,
+            "confidence_score": confidence_score,
             "stores": {}
         }
         
@@ -192,20 +185,20 @@ def _minimize_visits_optimization(cur, req: ItemRequest):
                     total_cost += item_data["stores"][store_name]["price"]
             
             if items_covered > 0:
-                score = items_covered / (total_cost + 1)  # +1 to avoid division by zero
+                score = items_covered / (total_cost + 1)
                 if score > best_score:
                     best_score = score
                     best_store = store_name
         
         if best_store:
             stores_used.add(best_store)
-            # Add items from this store
             for canonical, item_data in item_store_prices.items():
                 if canonical not in selected_items and best_store in item_data["stores"]:
                     selected_items[canonical] = {
                         "store": best_store,
                         "data": item_data["stores"][best_store],
-                        "raw_item": item_data["raw_item"]
+                        "raw_item": item_data["raw_item"],
+                        "confidence_score": item_data["confidence_score"]
                     }
         else:
             break
@@ -216,7 +209,7 @@ def _minimize_visits_optimization(cur, req: ItemRequest):
     total_cost = 0
     
     for raw_item in req.items:
-        canonical = canonicalize(raw_item)
+        canonical, confidence_score = canonicalize(raw_item)
         if canonical in selected_items:
             item = selected_items[canonical]
             store = item["store"]
@@ -225,6 +218,7 @@ def _minimize_visits_optimization(cur, req: ItemRequest):
             results.append({
                 "query": raw_item,
                 "canonical": canonical,
+                "confidence_score": item["confidence_score"],
                 "store": store,
                 "price": price,
                 "raw_name": item["data"]["raw_name"],
@@ -237,6 +231,7 @@ def _minimize_visits_optimization(cur, req: ItemRequest):
             results.append({
                 "query": raw_item,
                 "canonical": canonical,
+                "confidence_score": confidence_score,
                 "store": None,
                 "price": None,
                 "note": "Not available in selected stores"
@@ -252,31 +247,74 @@ def _minimize_visits_optimization(cur, req: ItemRequest):
     }
 
 def _maximize_savings_optimization(cur, req: ItemRequest):
-    """Original logic - find absolute cheapest for each item"""
+    """Find absolute cheapest for each item regardless of store"""
     results = []
     store_totals = {}
     stores_used = set()
-    
+    total_cost = 0
+
     for raw_item in req.items:
-        canonical = canonicalize(raw_item)
-        
+        canonical, confidence_score = canonicalize(raw_item)
+
         query = """
-            SELECT s.store_name, s.distance_miles, p.price, p.raw_name, p.date_collected
+            SELECT s.store_name, p.price, pv.raw_name, p.date_collected, p.unit_price
             FROM prices p
             JOIN stores s ON p.store_id = s.id
-            WHERE p.product_variant_id = (
-                SELECT id FROM products WHERE canonical_name = ?
-            )
+            JOIN product_variants pv ON p.product_variant_id = pv.id
+            JOIN products prod ON pv.product_id = prod.id
+            WHERE prod.canonical_name = ?
         """
+
         params = [canonical]
-        
-        if req.max_distance_miles:
-            query += " AND s.distance_miles <= ?"
-            params.append(req.max_distance_miles)
-            
+
         if req.preferred_stores:
             placeholders = ",".join("?" * len(req.preferred_stores))
             query += f" AND s.store_name IN ({placeholders})"
             params.extend(req.preferred_stores)
-            
-        query += " ORDER BY p.
+
+        query += " ORDER BY p.price ASC LIMIT 1"
+
+        cur.execute(query, params)
+        row = cur.fetchone()
+
+        if row:
+            # Use dictionary-style access with column names
+            result_store_name = row["store_name"]
+            result_price = row["price"]
+            result_raw_name = row["raw_name"]
+            result_date_collected = row["date_collected"]
+            result_unit_price = row["unit_price"]
+
+            results.append({
+                "query": raw_item,
+                "canonical": canonical,
+                "confidence_score": confidence_score,
+                "store": result_store_name,
+                "price": result_price,
+                "unit_price": result_unit_price,
+                "raw_name": result_raw_name,
+                "date_collected": result_date_collected
+            })
+
+            stores_used.add(result_store_name)
+            store_totals[result_store_name] = store_totals.get(result_store_name, 0.0) + result_price
+            total_cost += result_price
+        else:
+            results.append({
+                "query": raw_item,
+                "canonical": canonical,
+                "confidence_score": confidence_score,
+                "store": None,
+                "price": None,
+                "note": "Not available in any store"
+            })
+
+    return {
+        "mode": "maximize_savings",
+        "items": results,
+        "stores_used": list(stores_used),
+        "store_totals": store_totals,
+        "total_cost": total_cost,
+        "num_stores": len(stores_used)
+    }
+
