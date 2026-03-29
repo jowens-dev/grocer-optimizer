@@ -1,4 +1,4 @@
-Code # Grocery Optimizer
+Grocery Optimizer
 
 A price comparison and grocery shopping optimization system that ingests multi-store pricing data, normalizes product information across retailers, and provides a REST API for finding the best deals and optimizing shopping lists.
 
