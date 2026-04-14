@@ -62,25 +62,25 @@ Grocery Optimizer automates the collection, normalization, and comparison of gro
 ## Features
 
 ### Data Pipeline
-- 📥 **Automated CSV Ingestion** - Import pricing data from multiple store formats
-- 🔄 **Product Normalization** - Intelligently matches product variants across retailers
+- **Automated CSV Ingestion** - Import pricing data from multiple store formats
+- **Product Normalization** - Intelligently matches product variants across retailers
   - "Milk 1gal" (Walmart) → "Whole Milk - 1 Gallon"
   - "1 Gallon Whole Milk" (Target) → "Whole Milk - 1 Gallon"
-- ✅ **Data Validation** - Handles missing data, duplicates, and format variations
-- 🔁 **Update Handling** - Manages price updates and historical data
+- **Data Validation** - Handles missing data, duplicates, and format variations
+- **Update Handling** - Manages price updates and historical data
 
 ### API Capabilities
-- 🔍 **Best Price Lookup** - Find the lowest price for any product across all stores
-- 📊 **Price Comparison** - Compare prices for a product across multiple retailers
-- 📝 **Product Search** - Search products by name or category
-- 🏪 **Store Filtering** - View products and prices by specific store
-- 📂 **Category Browsing** - Browse products by category
+- **Best Price Lookup** - Find the lowest price for any product across all stores
+- **Price Comparison** - Compare prices for a product across multiple retailers
+- **Product Search** - Search products by name or category
+- **Store Filtering** - View products and prices by specific store
+- **Category Browsing** - Browse products by category
 
 ### Database Design
-- 💾 **Relational Schema** - Normalized database structure for efficient queries
-- 📈 **Historical Tracking** - Maintains price history for trend analysis
-- 🏷️ **Product Categorization** - Organized product taxonomy
-- ⚡ **Optimized Queries** - Indexed for fast price lookups
+- **Relational Schema** - Normalized database structure for efficient queries
+- **Historical Tracking** - Maintains price history for trend analysis
+- **Product Categorization** - Organized product taxonomy
+- **Optimized Queries** - Indexed for fast price lookups
 
 ## Project Structure
 grocery-optimizer/
@@ -203,7 +203,9 @@ Scalability
 System designed to handle 100+ stores and 100,000+ products
 Solution: Efficient data structures, batch processing, database optimization
 
-Current Status & Roadmap✅ Completed CSV ingestion pipeline Product normalization engine MySQL database schema REST API with core endpoints Sample data for testing🚧 In Progress Web scraping integration for live price data API authentication and rate limiting Price trend analysis and visualization🔮 Future Enhancements Shopping list optimization algorithm (minimize cost + travel distance) Price drop alerts and notifications Mobile app integration Support for more grocery chains (Kroger, Safeway, Whole Foods, etc.) Machine learning for price prediction Coupon and sale tracking Meal planning integrationExample Use CasesIndividual Shoppers:Check best prices before shoppingCompare stores for weekly grocery listTrack price trends over timeBudget-Conscious Families:Optimize shopping across multiple storesIdentify biggest savings opportunitiesPlan shopping routes efficientlyDevelopers:Integrate price data into shopping appsBuild on top of the APIExtend with additional featuresPerformanceAPI Response Time: < 100ms for price queriesIngestion Speed: Processes 1,000+ products/minuteDatabase: Handles 500,000+ price records efficientlyNormalization Accuracy: 95%+ match rate for common productsDevelopmentRunning Tests Code pytest tests/Code Formatting Code black .Database Migrations Code # Future: Will use Alembic for schema migrationsContributingThis is a personal portfolio project, but suggestions and feedback are welcome!LicenseMIT License - see LICENSE file for detailsContactJohn Owens  
+Current Status & Roadmap:
+
+Completed CSV ingestion pipeline Product normalization engine MySQL database schema REST API with core endpoints Sample data for testing. In Progress Web scraping integration for live price data API authentication and rate limiting Price trend analysis and visualization. Future Enhancements Shopping list optimization algorithm (minimize cost + travel distance) Price drop alerts and notifications Mobile app integration Support for more grocery chains (Kroger, Safeway, Whole Foods, etc.) Machine learning for price prediction Coupon and sale tracking Meal planning integrationExample Use CasesIndividual Shoppers:Check best prices before shoppingCompare stores for weekly grocery listTrack price trends over timeBudget-Conscious Families:Optimize shopping across multiple storesIdentify biggest savings opportunitiesPlan shopping routes efficientlyDevelopers:Integrate price data into shopping appsBuild on top of the APIExtend with additional featuresPerformanceAPI Response Time: < 100ms for price queriesIngestion Speed: Processes 1,000+ products/minuteDatabase: Handles 500,000+ price records efficientlyNormalization Accuracy: 95%+ match rate for common productsDevelopmentRunning Tests Code pytest tests/Code Formatting Code black .Database Migrations Code # Future: Will use Alembic for schema migrationsContributingThis is a personal portfolio project, but suggestions and feedback are welcome!LicenseMIT License - see LICENSE file for detailsContactJohn Owens  
 Email: jchristopher.iq@gmail.com  
 GitHub: @jowens-dev  
 LinkedIn: [Your LinkedIn URL]
