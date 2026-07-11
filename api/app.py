@@ -1,17 +1,66 @@
 
 # app.py (Enhanced FastAPI)
+import json
+from pathlib import Path
+from typing import Any, Dict, List, Literal, Optional
+
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-from typing import List, Dict, Any, Optional, Literal
+
+from api.schemas import ItemRequest, RecipeEstimateRequest, RecipeEstimateResponse, RecipeInput
 from utils.db_helpers import get_conn
 from utils.normalize import canonicalize
+from utils.recipe_optimizer import estimate_recipe_cost
 
 app = FastAPI(title="Grocery Price Optimizer")
 
-class ItemRequest(BaseModel):
-    items: List[str]
-    mode: Literal["single_store", "minimize_visits", "maximize_savings"] = "maximize_savings"
-    preferred_stores: Optional[List[str]] = None
+RECIPE_STORE_PATH = Path(__file__).resolve().parents[1] / "data" / "recipes.json"
+
+
+def _load_recipes() -> List[dict[str, Any]]:
+    if not RECIPE_STORE_PATH.exists():
+        return []
+    try:
+        return json.loads(RECIPE_STORE_PATH.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return []
+
+
+def _save_recipes(recipes: List[dict[str, Any]]) -> None:
+    RECIPE_STORE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    RECIPE_STORE_PATH.write_text(json.dumps(recipes, indent=2), encoding="utf-8")
+
+
+@app.get("/health")
+def health_check():
+    return {"status": "ok", "recipes_file": str(RECIPE_STORE_PATH)}
+
+
+@app.post("/recipes", response_model=RecipeInput)
+def create_recipe(req: RecipeInput):
+    """Persist a recipe locally so it can be reused later."""
+    recipes = _load_recipes()
+    recipes.append(req.model_dump())
+    _save_recipes(recipes)
+    return req
+
+
+@app.get("/recipes", response_model=List[RecipeInput])
+def list_recipes():
+    """List saved recipes."""
+    return _load_recipes()
+
+
+@app.post("/recipes/estimate", response_model=RecipeEstimateResponse)
+def estimate_recipe(req: RecipeEstimateRequest):
+    """Estimate the cheapest way to buy the ingredients for a recipe."""
+    return estimate_recipe_cost(
+        recipe_name=req.name,
+        ingredients=[ingredient.model_dump() for ingredient in req.ingredients],
+        preferred_stores=req.preferred_stores,
+        mode=req.mode,
+    )
+
 
 @app.post("/cheapest")
 def cheapest_list(req: ItemRequest):

@@ -103,83 +103,53 @@ grocery-optimizer/
 
 ### Prerequisites
 - Python 3.9+
-- MySQL 8.0+
+- SQLite (bundled with Python)
 
 ### Setup
 
 ```bash
-# Clone the repository
-git clone https://github.com/jowens-dev/grocer-optimizer.git
-cd grocer-optimizer
+cd /Users/yella4jella/workspace/grocer-optimizer
 
 # Create virtual environment
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+/Users/yella4jella/workspace/praxis/.venv/bin/python -m venv .venv
+source .venv/bin/activate
 
 # Install dependencies
-pip install -r requirements.txt
+pip install -r requirements.txt pytest httpx
 
-# Set up environment variables
-cp .env.example .env
-# Edit .env with your MySQL credentials:
-#   DB_HOST=localhost
-#   DB_USER=your_user
-#   DB_PASSWORD=your_password
-#   DB_NAME=grocery_optimizer
+# Initialize the local SQLite database
+python - <<'PY'
+from utils.db_helpers import init_db
+init_db()
+PY
 
-# Create database and load schema
-mysql -u your_user -p < db/schema.sql
+# Seed the sample data if needed
+python ingest/ingest_csv.py --dir ingest/sample_store_csvs
+```
 
-Usage
+### Run the API
 
-1. Ingest Store Pricing Data
-# Import Walmart prices
-python ingest/ingest_csv.py --file ingest/sample_store_csvs/walmart_2025-11-11.csv --store walmart
+```bash
+uvicorn api.app:app --reload
+```
 
-# Import Target prices
-python ingest/ingest_csv.py --file ingest/sample_store_csvs/target_2025-11-11.csv --store target
+The API will be available at http://localhost:8000 and the interactive docs at http://localhost:8000/docs.
 
-2. Start the API Server
-cd api
-uvicorn app:app --reload
+### Example requests
 
-# API available at http://localhost:8000
-# Interactive docs at http://localhost:8000/docs
+```bash
+# Save a recipe
+curl -X POST http://localhost:8000/recipes \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"Breakfast","ingredients":[{"name":"milk","quantity":1,"unit":"gallon"}]}'
 
-3. Query the API
-Find Best Price
-curl http://localhost:8000/best-price?product=milk
-Response:
-{
-  "product": "Whole Milk - 1 Gallon",
-  "normalized_name": "whole_milk_1gal",
-  "best_price": 3.49,
-  "store": "Walmart",
-  "date": "2025-11-11",
-  "savings_vs_highest": 0.30
-}
-Compare Prices Across Stores
-curl http://localhost:8000/compare?product=bread
-Response:
-{
-  "product": "White Bread - 20oz",
-  "prices": [
-    {"store": "Walmart", "price": 1.98, "date": "2025-11-11"},
-    {"store": "Target", "price": 2.29, "date": "2025-11-11"}
-  ],
-  "price_range": {
-    "lowest": 1.98,
-    "highest": 2.29,
-    "difference": 0.31
-  }
-}
-Search Products
-curl http://localhost:8000/products?search=chicken
-Get Products by Category
-curl http://localhost:8000/products?category=dairy
-Filter by Store
-curl http://localhost:8000/products?store=walmart&category=produce
-Key Technical Components
+# Estimate recipe cost with preferred stores
+curl -X POST http://localhost:8000/recipes/estimate \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"Breakfast","ingredients":[{"name":"milk","quantity":1,"unit":"gallon"}],"preferred_stores":["Kroger","Walmart"],"mode":"maximize_savings"}'
+```
+
+### Key Technical Components
 Product Normalization Engine
 The normalization system handles variations in product naming across different retailers:Challenges Solved:Different unit formats: "1 gal", "1 gallon", "1G"Brand variations: "Great Value Milk" vs "Market Pantry Milk"Spelling inconsistencies and abbreviationsExtra whitespace and special charactersApproach:Text cleaning and standardizationUnit normalization (oz, lb, gal, etc.)Brand extraction and matchingFuzzy string matching for variantsDatabase SchemaEfficient relational design optimized for price queries:Tables:products - Normalized product catalogstores - Retailer informationprices - Historical pricing data with timestampscategories - Product categorization hierarchyproduct_variants - Maps store-specific names to normalized productsIndexes:Product name lookupsPrice queries by store/dateCategory filteringAPI DesignRESTful endpoints following best practices:Clear, intuitive URL structureProper HTTP methods and status codesJSON responses with consistent formatQuery parameter filteringError handling with descriptive messagesAuto-generated OpenAPI documentation (FastAPI)Technical Challenges SolvedProduct Name Standardization
 
