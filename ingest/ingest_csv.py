@@ -56,11 +56,18 @@ def ingest_csv_file(csv_path, conn):
 
     print(f"Ingesting {csv_path} for {store_name}")
 
+    # Identify club stores (Costco, Sam's Club, BJ's, etc.)
+    is_club = 1 if store_name.lower() in {"costco", "sam's club", "sams club", "bj's", "bjs"} else 0
+
     # Get or create store
     cur.execute("""
-        INSERT OR IGNORE INTO stores (store_name, created_at, updated_at)
-        VALUES (?, datetime('now'), datetime('now'))
-    """, (store_name,))
+        INSERT OR IGNORE INTO stores (store_name, is_club, created_at, updated_at)
+        VALUES (?, ?, datetime('now'), datetime('now'))
+    """, (store_name, is_club))
+    # Ensure is_club is updated if store was already created
+    cur.execute("""
+        UPDATE stores SET is_club = ?, updated_at = datetime('now') WHERE store_name = ?
+    """, (is_club, store_name))
     cur.execute("SELECT id FROM stores WHERE store_name = ?", (store_name,))
     store_id = cur.fetchone()[0]
 

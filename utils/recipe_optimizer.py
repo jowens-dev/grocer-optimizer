@@ -44,6 +44,8 @@ def estimate_recipe_cost(
     ingredients: List[Dict[str, Any]],
     preferred_stores: Optional[List[str]] = None,
     mode: str = "maximize_savings",
+    club_memberships: Optional[List[str]] = None,
+    zip_code: str = "90210",
 ) -> Dict[str, Any]:
     conn = get_conn()
     cur = conn.cursor()
@@ -64,17 +66,24 @@ def estimate_recipe_cost(
 
         cur.execute(
             """
-            SELECT s.store_name, p.price, pv.raw_name, p.date_collected, p.unit_price
+            SELECT s.store_name, p.price, pv.raw_name, p.date_collected, p.unit_price, s.is_club
             FROM prices p
             JOIN stores s ON p.store_id = s.id
             JOIN product_variants pv ON p.product_variant_id = pv.id
             JOIN products prod ON pv.product_id = prod.id
-            WHERE prod.canonical_name = ?
+            WHERE prod.canonical_name = ? AND p.zip_code = ?
             ORDER BY p.price ASC
             """,
-            (canonical_name,),
+            (canonical_name, zip_code),
         )
         rows = [dict(row) for row in cur.fetchall()]
+
+        # Filter out club stores if the user does not have membership
+        allowed_clubs = {c.lower() for c in club_memberships} if club_memberships else set()
+        rows = [
+            row for row in rows
+            if not row.get("is_club") or row["store_name"].lower() in allowed_clubs
+        ]
 
         if not rows:
             missing_ingredients.append({

@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AisleOne - Modern Grocery Price Optimizer</title>
+    <meta name="description" content="Compare and optimize your grocery list pricing across all major grocery and warehouse club stores. Find the best deals with custom shopper profiles.">
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- Main Stylesheet -->
+    <link rel="stylesheet" href="app.css">
+    <!-- Favicon link pointing to our SVG app icon -->
+    <link rel="icon" type="image/svg+xml" href="assets/app_icon.svg">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar Navigation & Global Config -->
+        <aside class="sidebar">
+            <div class="brand-section">
+                <!-- Inline stylized SVG logo matching our app icon theme -->
+                <svg class="logo" viewBox="0 0 512 512" width="48" height="48">
+                    <rect x="36" y="36" width="440" height="440" rx="90" ry="90" fill="#10B981" />
+                    <circle cx="236" cy="245" r="40" fill="#EF4444" />
+                    <circle cx="276" cy="245" r="40" fill="#EF4444" />
+                    <path d="M 200 250 C 200 300, 230 305, 256 305 C 282 305, 312 300, 312 250 Z" fill="#EF4444" />
+                    <path d="M 170 230 A 86 86 0 0 1 342 230" fill="none" stroke="#FFFFFF" stroke-width="8" stroke-linecap="round" />
+                    <rect x="140" y="230" width="232" height="20" rx="10" ry="10" fill="#FFFFFF" />
+                </svg>
+                <div class="brand-text">
+                    <h1>AisleOne</h1>
+                    <span class="tagline">Smart Grocer Concierge</span>
+                </div>
+            </div>
+
+            <!-- User Status card -->
+            <div id="user-status-card" class="user-status-card" style="display: flex; flex-direction: column; gap: 0.75rem; align-items: stretch;">
+                <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                    <div class="user-info">
+                        <span class="username" id="display-username">Loading...</span>
+                        <span class="user-tier badge badge-free" id="display-tier">Free</span>
+                    </div>
+                    <button class="logout-btn" onclick="logout()">Logout</button>
+                </div>
+                
+                <!-- Location Zip Selector -->
+                <div class="zip-location-box" style="display: flex; gap: 0.5rem; align-items: center; border-top: 1px solid rgba(255,255,255,0.06); padding-top: 0.75rem; width: 100%;">
+                    <span style="font-size: 0.8rem; color: var(--text-muted);">📍 Zip:</span>
+                    <input type="text" id="display-zip" value="90210" style="background: rgba(0,0,0,0.2); border: 1px solid var(--border-card); border-radius: 6px; padding: 0.25rem 0.5rem; color: #fff; font-size: 0.8rem; width: 65px; outline: none;" onkeypress="handleZipKeyPress(event)">
+                    <button onclick="updateZipCode()" style="background: var(--primary); border: none; border-radius: 6px; color: #fff; padding: 0.25rem 0.5rem; font-size: 0.75rem; cursor: pointer; font-weight: bold; font-family: var(--font-outfit);">Set</button>
+                </div>
+            </div>
+
+            <nav class="nav-menu">
+                <button id="nav-optimizer" class="nav-btn active" onclick="switchTab('optimizer')">
+                    <span class="icon">🛒</span> Optimizer
+                </button>
+                <button id="nav-recipes" class="nav-btn" onclick="switchTab('recipes')">
+                    <span class="icon">🍳</span> Recipes
+                </button>
+                <button id="nav-explorer" class="nav-btn" onclick="switchTab('explorer')">
+                    <span class="icon">🔍</span> Price Explorer
+                </button>
+            </nav>
+
+            <!-- Global Configurations (Membership/Clubs) -->
+            <div class="config-card">
+                <h3>Subscription Tier</h3>
+                <div class="tier-switch">
+                    <label class="switch-label">
+                        <input type="radio" name="tier" id="tier-free" value="free" checked onchange="toggleTier()">
+                        <span class="switch-btn">Free</span>
+                    </label>
+                    <label class="switch-label">
+                        <input type="radio" name="tier" id="tier-premium" value="premium" onchange="toggleTier()">
+                        <span class="switch-btn premium-btn">Premium</span>
+                    </label>
+                </div>
+                
+                <div id="premium-features" class="premium-features hidden">
+                    <hr class="divider">
+                    <h3>Club Memberships</h3>
+                    <div class="club-checklist">
+                        <label class="checkbox-container">
+                            <input type="checkbox" id="club-costco" value="Costco" onchange="updateClubs()">
+                            <span class="checkmark"></span>
+                            Costco
+                        </label>
+                        <label class="checkbox-container">
+                            <input type="checkbox" id="club-sams" value="Sams Club" onchange="updateClubs()">
+                            <span class="checkmark"></span>
+                            Sam's Club
+                        </label>
+                        <label class="checkbox-container">
+                            <input type="checkbox" id="club-bjs" value="BJ's" onchange="updateClubs()">
+                            <span class="checkmark"></span>
+                            BJ's Wholesale
+                        </label>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Content Area -->
+        <main class="main-content">
+            <!-- TAB 1: SHOPPING LIST OPTIMIZER -->
+            <section id="tab-optimizer" class="tab-panel active">
+                <div class="panel-header">
+                    <h2>Shopping List Optimizer</h2>
+                    <p>Add items to your list and let our optimizer match pricing across stores.</p>
+                </div>
+
+                <div class="dashboard-grid">
+                    <!-- Left: Item builder & Persona -->
+                    <div class="card card-input">
+                        <h3>Build Shopping List</h3>
+                        <div class="input-group" style="position: relative;">
+                            <input type="text" id="item-input" placeholder="e.g. Milk, Banana, Eggs" onkeypress="handleItemKeyPress(event)" oninput="handleItemInput(event)">
+                            <button id="add-item-btn" class="btn btn-primary" onclick="addItemFromInput()">Add</button>
+                            <div id="autocomplete-list" class="autocomplete-dropdown hidden"></div>
+                        </div>
+                        
+                        <ul id="shopping-list" class="shopping-list">
+                            <!-- Items dynamically added here -->
+                        </ul>
+
+                        <div class="persona-section">
+                            <h3>Select Shopper Profile</h3>
+                            
+                            <div class="persona-option">
+                                <label class="persona-card">
+                                    <input type="radio" name="persona" id="persona-sam" value="single_store_sam" checked>
+                                    <div class="persona-info">
+                                        <div class="persona-header">
+                                            <span class="persona-title">Single Store Sam</span>
+                                            <span class="badge badge-free">Free</span>
+                                        </div>
+                                        <p>Finds the single cheapest grocery store for your entire list. Saves time, limits trips.</p>
+                                    </div>
+                                </label>
+                            </div>
+
+                            <div class="persona-option locked" id="card-bob">
+                                <label class="persona-card">
+                                    <input type="radio" name="persona" id="persona-bob" value="balanced_budget_bob" disabled>
+                                    <div class="persona-info">
+                                        <div class="persona-header">
+                                            <span class="persona-title">Balanced Budget Bob</span>
+                                            <span class="badge badge-premium">Premium</span>
+                                        </div>
+                                        <p>Balances savings and travel. Splits your list across up to two stores to save more.</p>
+                                    </div>
+                                </label>
+                            </div>
+
+                            <div class="persona-option locked" id="card-francine">
+                                <label class="persona-card">
+                                    <input type="radio" name="persona" id="persona-francine" value="fantastically_frugal_francine" disabled>
+                                    <div class="persona-info">
+                                        <div class="persona-header">
+                                            <span class="persona-title">Fantastically Frugal Francine</span>
+                                            <span class="badge badge-premium">Premium</span>
+                                        </div>
+                                        <p>Absolute lowest price possible. Splits your items across all stores regardless of count.</p>
+                                    </div>
+                                </label>
+                            </div>
+                        </div>
+
+                        <button id="optimize-btn" class="btn btn-action" onclick="optimizeList()">
+                            Optimize Prices ⚡
+                        </button>
+                    </div>
+
+                    <!-- Right: Results Panel -->
+                    <div class="card card-results">
+                        <h3>Optimization Results</h3>
+                        
+                        <div id="results-placeholder" class="results-placeholder">
+                            <span class="placeholder-icon">🎯</span>
+                            <p>Build your list and click <strong>Optimize Prices</strong> to see recommendations.</p>
+                        </div>
+
+                        <div id="results-container" class="results-container hidden">
+                            <!-- Metrics summary -->
+                            <div class="metrics-row">
+                                <div class="metric-card">
+                                    <span class="metric-label">Estimated Total</span>
+                                    <span class="metric-value" id="metric-total">$0.00</span>
+                                </div>
+                                <div class="metric-card">
+                                    <span class="metric-label">Stores to Visit</span>
+                                    <span class="metric-value" id="metric-stores">0</span>
+                                </div>
+                                <div class="metric-card">
+                                    <span class="metric-label">Optimized Mode</span>
+                                    <span class="metric-value badge" id="metric-mode">Sam</span>
+                                </div>
+                            </div>
+
+                            <!-- List breakdown -->
+                            <h4>Item Breakdown</h4>
+                            <div class="table-container">
+                                <table class="results-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Item Search</th>
+                                            <th>Canonical Match</th>
+                                            <th>Store Recommendation</th>
+                                            <th class="text-right">Price</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="results-table-body">
+                                        <!-- Rows dynamically generated -->
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            <!-- Store Totals -->
+                            <h4 class="mt-4">Estimated Spend per Store</h4>
+                            <div id="store-breakdown-list" class="store-breakdown-list">
+                                <!-- Store subtotals dynamically added -->
+                            </div>
+
+                            <!-- Grouped Store Checklists -->
+                            <h4 class="mt-4">My Shopping Checklists</h4>
+                            <div id="shopping-checklists-container" class="shopping-checklists-container">
+                                <!-- Grouped checklists dynamically added -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- TAB 2: RECIPE ESTIMATOR -->
+            <section id="tab-recipes" class="tab-panel">
+                <div class="panel-header">
+                    <h2>Recipe Price Estimator</h2>
+                    <p>Load recipes or create new ones to see the cheapest optimization cost.</p>
+                </div>
+
+                <div class="dashboard-grid">
+                    <!-- Left: Recipes Lists & Form -->
+                    <div class="card card-input">
+                        <h3>Your Recipes</h3>
+                        <ul id="recipe-list" class="recipe-list">
+                            <!-- Saved recipes will render here -->
+                        </ul>
+
+                        <div class="recipe-form-card">
+                            <h3>Create New Recipe</h3>
+                            <div class="input-group">
+                                <input type="text" id="recipe-name-input" placeholder="e.g. Pancake Breakfast">
+                            </div>
+                            
+                            <h4>Ingredients</h4>
+                            <div class="ingredient-builder-row">
+                                <input type="text" id="ing-name" placeholder="Item name (e.g. Milk)">
+                                <input type="number" id="ing-qty" placeholder="Qty" min="0.1" step="0.1" value="1">
+                                <input type="text" id="ing-unit" placeholder="Unit (e.g. gallon)">
+                                <button class="btn btn-secondary" onclick="addIngredientToDraft()">+</button>
+                            </div>
+
+                            <ul id="recipe-draft-ingredients" class="recipe-draft-ingredients">
+                                <!-- Draft ingredients -->
+                            </ul>
+
+                            <button class="btn btn-primary w-full mt-3" onclick="saveRecipe()">Save Recipe</button>
+                        </div>
+                    </div>
+
+                    <!-- Right: Recipe Optimization Output -->
+                    <div class="card card-results">
+                        <h3>Recipe Pricing Details</h3>
+                        <div id="recipe-results-placeholder" class="results-placeholder">
+                            <span class="placeholder-icon">🍳</span>
+                            <p>Select a recipe from the list on the left to analyze prices.</p>
+                        </div>
+
+                        <div id="recipe-results-container" class="results-container hidden">
+                            <div class="recipe-summary-header">
+                                <h3 id="recipe-result-title">Pancakes</h3>
+                                <span class="recipe-mode-badge" id="recipe-result-mode">Sam</span>
+                            </div>
+
+                            <div class="metrics-row mt-3">
+                                <div class="metric-card">
+                                    <span class="metric-label">Recipe Cost</span>
+                                    <span class="metric-value" id="recipe-metric-total">$0.00</span>
+                                </div>
+                                <div class="metric-card">
+                                    <span class="metric-label">Stores to Visit</span>
+                                    <span class="metric-value" id="recipe-metric-stores">0</span>
+                                </div>
+                                <div class="metric-card">
+                                    <span class="metric-label">Selected Main Store</span>
+                                    <span class="metric-value" id="recipe-metric-main-store">Walmart</span>
+                                </div>
+                            </div>
+
+                            <h4 class="mt-4">Ingredient Price Details</h4>
+                            <div class="table-container">
+                                <table class="results-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Ingredient</th>
+                                            <th>Qty/Unit</th>
+                                            <th>Store Match</th>
+                                            <th class="text-right">Estimated Cost</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="recipe-results-table-body">
+                                        <!-- Dynamically filled -->
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            <div id="recipe-missing-box" class="warning-box hidden">
+                                <strong>Missing Ingredients:</strong>
+                                <ul id="recipe-missing-list"></ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- TAB 3: PRICE EXPLORER -->
+            <section id="tab-explorer" class="tab-panel">
+                <div class="panel-header">
+                    <h2>Database Price Explorer</h2>
+                    <p>Compare product variants and prices across retailers in real-time.</p>
+                </div>
+
+                <div class="card">
+                    <div class="explorer-search-bar">
+                        <input type="text" id="explorer-search" placeholder="Search products in database... (e.g. Milk, Eggs, Banana)" onkeypress="handleExplorerSearchPress(event)">
+                        <button class="btn btn-primary" onclick="searchExplorer()">Search</button>
+                    </div>
+
+                    <div id="explorer-results" class="explorer-results-grid">
+                        <!-- Comparative product cards rendered here -->
+                        <div class="results-placeholder">
+                            <span class="placeholder-icon">🔍</span>
+                            <p>Search for an item to compare matching store prices side-by-side.</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Auth Overlay (Modal) -->
+    <div id="auth-overlay" class="auth-overlay">
+        <div class="auth-card card">
+            <div class="auth-logo-header">
+                <svg class="logo" viewBox="0 0 512 512" width="64" height="64" style="margin: 0 auto 1rem auto; display: block; border-radius: 12px; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);">
+                    <rect x="36" y="36" width="440" height="440" rx="90" ry="90" fill="#10B981" />
+                    <circle cx="236" cy="245" r="40" fill="#EF4444" />
+                    <circle cx="276" cy="245" r="40" fill="#EF4444" />
+                    <path d="M 200 250 C 200 300, 230 305, 256 305 C 282 305, 312 300, 312 250 Z" fill="#EF4444" />
+                    <path d="M 170 230 A 86 86 0 0 1 342 230" fill="none" stroke="#FFFFFF" stroke-width="8" stroke-linecap="round" />
+                    <rect x="140" y="230" width="232" height="20" rx="10" ry="10" fill="#FFFFFF" />
+                </svg>
+                <h2>Welcome to AisleOne</h2>
+                <p>Login or create an account to start comparing prices.</p>
+            </div>
+            
+            <div class="auth-inputs" style="margin-top: 1.5rem; display: flex; flex-direction: column; gap: 0.75rem;">
+                <input type="text" id="auth-username" placeholder="Username">
+                <input type="password" id="auth-password" placeholder="Password" style="background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border-card); color: var(--text-primary); padding: 0.85rem 1.25rem; border-radius: 12px; outline: none; width: 100%;">
+            </div>
+            
+            <div class="auth-actions" style="margin-top: 1.5rem; display: flex; gap: 0.75rem;">
+                <button class="btn btn-primary" style="flex: 1;" onclick="loginUser()">Login</button>
+                <button class="btn btn-secondary" style="flex: 1;" onclick="registerUser()">Sign Up</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Application Javascript -->
+    <script src="app.js"></script>
+</body>
+</html>
