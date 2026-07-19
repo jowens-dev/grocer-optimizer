@@ -4,12 +4,14 @@ import sqlite3
 import random
 import argparse
 from pathlib import Path
+from dotenv import load_dotenv
 
 # Resolve import paths
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+load_dotenv(ROOT / ".env")
 from utils.db_helpers import DB_PATH, get_conn
 
 # 10 Products catalog
@@ -132,17 +134,144 @@ def get_zip_multiplier(zip_code: str) -> float:
     multiplier = 0.85 + (random.random() * 0.40) # range: 0.85x to 1.25x pricing
     return round(multiplier, 2)
 
+STORE_SLUGS = {
+    "Walmart": "walmart",
+    "Target": "target",
+    "Kroger": "kroger",
+    "Safeway": "safeway",
+    "Costco": "costco",
+    "Sams Club": "sams-club"
+}
+
+def extract_products_from_json(data, results=None):
+    if results is None:
+        results = []
+    if isinstance(data, dict):
+        if data.get("@type") == "Product":
+            results.append(data)
+        for val in data.values():
+            extract_products_from_json(val, results)
+    elif isinstance(data, list):
+        for item in data:
+            extract_products_from_json(item, results)
+    return results
+
+def _scrape_live_instacart(store_slug: str, product_name: str, zip_code: str, scraperapi_key: str):
+    import requests
+    from bs4 import BeautifulSoup
+    import json
+    import re
+    
+    url = f"https://www.instacart.com/store/{store_slug}/search/{product_name}"
+    proxy_url = "http://api.scraperapi.com"
+    params = {
+        "api_key": scraperapi_key,
+        "url": url,
+        "keep_headers": "true"
+    }
+    
+    headers = {
+        "Cookie": f"_instacart_zipcode={zip_code}",
+        "X-Instacart-Zipcode": zip_code,
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    }
+    
+    try:
+        print(f"  Attempting live scrape for '{product_name}' at {store_slug} via ScraperAPI...")
+        resp = requests.get(proxy_url, params=params, headers=headers, timeout=30)
+        if resp.status_code != 200:
+            print(f"    [Error] ScraperAPI returned HTTP status {resp.status_code}")
+            return None
+            
+        soup = BeautifulSoup(resp.text, 'html.parser')
+        products = []
+        for script in soup.find_all("script", type="application/ld+json"):
+            try:
+                data = json.loads(script.string)
+                products.extend(extract_products_from_json(data))
+            except Exception:
+                continue
+                
+        if not products:
+            print("    [Info] No JSON-LD product objects found on page.")
+            return None
+            
+        candidates = []
+        for p in products:
+            name = p.get("name")
+            offers = p.get("offers")
+            if not name or not offers:
+                continue
+                
+            price = None
+            if isinstance(offers, dict):
+                price = offers.get("price")
+            elif isinstance(offers, list) and len(offers) > 0:
+                price = offers[0].get("price")
+                
+            if price is not None:
+                try:
+                    price_val = float(price)
+                    # Match if any keyword is in name
+                    if any(word in name.lower() for word in product_name.lower().split()):
+                        candidates.append((name, price_val))
+                except ValueError:
+                    continue
+                    
+        if not candidates:
+            # Fallback to top result
+            for p in products:
+                name = p.get("name")
+                offers = p.get("offers")
+                if name and offers:
+                    price = offers.get("price") if isinstance(offers, dict) else (offers[0].get("price") if isinstance(offers, list) and offers else None)
+                    if price:
+                        try:
+                            candidates.append((name, float(price)))
+                            break
+                        except ValueError:
+                            pass
+                            
+        if not candidates:
+            return None
+            
+        best_name, best_price = candidates[0]
+        print(f"    [Success] Scraped brand variant: '{best_name}' for ${best_price:.2f}")
+        
+        unit = "item"
+        qty = 1.0
+        name_lower = best_name.lower()
+        if "gal" in name_lower:
+            unit = "gallon"
+            qty = 1.0
+        elif "lb" in name_lower:
+            unit = "lb"
+            qty = 1.0
+        elif "oz" in name_lower:
+            unit = "oz"
+            m = re.search(r'(\d+(?:\.\d+)?)\s*oz', name_lower)
+            if m:
+                qty = float(m.group(1))
+                
+        return best_name, best_price, unit, qty
+        
+    except Exception as e:
+        print(f"    [Exception] Failed live scrape: {e}")
+        return None
+
 def scrape_and_ingest(zip_code: str):
     """
     Simulates or performs live pricing queries for a Zip Code on Instacart.
     Implements a robust localized database fallback seeding mechanism.
     """
-    print(f"Starting localized market ingestion for Zip Code: {zip_code}")
-    
-    # Calculate price multiplier for this location
-    multiplier = get_zip_multiplier(zip_code)
-    print(f"Determined regional price index multiplier: {multiplier}x")
-    
+    scraperapi_key = os.environ.get("SCRAPERAPI_KEY")
+    if scraperapi_key:
+        print(f"Starting LIVE Instacart ingestion for Zip Code: {zip_code} using ScraperAPI.")
+    else:
+        print(f"Starting simulated localized market ingestion for Zip Code: {zip_code} (no SCRAPERAPI_KEY defined).")
+        multiplier = get_zip_multiplier(zip_code)
+        print(f"Determined regional price index multiplier: {multiplier}x")
+        
     conn = get_conn()
     cur = conn.cursor()
     
@@ -164,20 +293,33 @@ def scrape_and_ingest(zip_code: str):
     price_count = 0
     
     for prod_name, stores_dict in BASE_PRICES.items():
-        # Get product id
         cur.execute("SELECT id FROM products WHERE canonical_name = ?", (prod_name,))
         product_id = cur.fetchone()[0]
         
-        for store_name, (raw_name, base_price, unit, qty) in stores_dict.items():
-            # Get store id
+        for store_name, (default_raw_name, base_price, default_unit, default_qty) in stores_dict.items():
             cur.execute("SELECT id FROM stores WHERE store_name = ?", (store_name,))
             store_id = cur.fetchone()[0]
             
-            # Apply regional pricing variation + small random variance per item
-            random.seed(hash(prod_name + store_name + zip_code))
-            item_variance = 0.95 + (random.random() * 0.10) # +/- 5%
-            local_price = round(base_price * multiplier * item_variance, 2)
+            scraped_data = None
+            if scraperapi_key:
+                store_slug = STORE_SLUGS.get(store_name)
+                if store_slug:
+                    scraped_data = _scrape_live_instacart(store_slug, prod_name, zip_code, scraperapi_key)
             
+            if scraped_data:
+                raw_name, local_price, unit, qty = scraped_data
+            else:
+                # Fallback to local multiplier simulation
+                if scraperapi_key:
+                    print(f"    [Fallback] Falling back to regional simulator for '{prod_name}' at {store_name}.")
+                multiplier_val = get_zip_multiplier(zip_code)
+                random.seed(hash(prod_name + store_name + zip_code))
+                item_variance = 0.95 + (random.random() * 0.10)
+                local_price = round(base_price * multiplier_val * item_variance, 2)
+                raw_name = default_raw_name
+                unit = default_unit
+                qty = default_qty
+                
             # Get or create variant
             cur.execute("""
                 SELECT id FROM product_variants WHERE product_id = ? AND raw_name = ?

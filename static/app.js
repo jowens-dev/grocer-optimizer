@@ -13,6 +13,13 @@ let state = {
 // Initialize app & auth checks
 document.addEventListener('DOMContentLoaded', () => {
     checkAuth();
+    
+    // Register Service Worker for PWA mobile installation
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('/service-worker.js')
+            .then(reg => console.log('[PWA] Service Worker registered successfully:', reg.scope))
+            .catch(err => console.error('[PWA] Service Worker registration failed:', err));
+    }
 });
 
 // Authentication System
@@ -846,4 +853,88 @@ function renderExplorerResults(rows) {
         `;
         container.appendChild(card);
     });
+}
+
+// Bulk Import Modal controls and text parser
+function openImportModal() {
+    document.getElementById('import-textarea').value = '';
+    document.getElementById('import-modal').classList.remove('hidden');
+}
+
+function closeImportModal() {
+    document.getElementById('import-modal').classList.add('hidden');
+}
+
+function parseAndImportBulkText() {
+    const text = document.getElementById('import-textarea').value.trim();
+    if (!text) {
+        closeImportModal();
+        return;
+    }
+    
+    // Split by newlines, commas, or semicolons
+    const lines = text.split(/[\n,;]+/);
+    let addedCount = 0;
+    
+    lines.forEach(line => {
+        let clean = line.trim();
+        if (!clean) return;
+        
+        // Strip out bullet list and numbered formatting indicators
+        clean = clean.replace(/^[-\*••+\s]+/, '');
+        clean = clean.replace(/^\[?\d+\]?[\.\)\s:-]*/, '');
+        clean = clean.trim();
+        
+        if (!clean) return;
+        
+        // Deduplicate items on addition
+        const duplicate = state.shoppingList.some(item => 
+            typeof item === 'object' ? item.name.toLowerCase() === clean.toLowerCase() : item.toLowerCase() === clean.toLowerCase()
+        );
+        
+        if (!duplicate) {
+            state.shoppingList.push({
+                name: clean,
+                variant_id: null
+            });
+            addedCount++;
+        }
+    });
+    
+    closeImportModal();
+    if (addedCount > 0) {
+        renderShoppingList();
+        triggerAutoReoptimize();
+    }
+}
+
+// Recipe to active shopping list merge utility
+function addRecipeToShoppingList() {
+    if (!state.selectedRecipe) return;
+    
+    let addedCount = 0;
+    state.selectedRecipe.ingredients.forEach(ing => {
+        const name = ing.name.trim();
+        if (!name) return;
+        
+        const duplicate = state.shoppingList.some(item => 
+            typeof item === 'object' ? item.name.toLowerCase() === name.toLowerCase() : item.toLowerCase() === name.toLowerCase()
+        );
+        
+        if (!duplicate) {
+            state.shoppingList.push({
+                name: name,
+                variant_id: null
+            });
+            addedCount++;
+        }
+    });
+    
+    if (addedCount > 0) {
+        renderShoppingList();
+        triggerAutoReoptimize();
+        switchTab('list');
+    } else {
+        alert('All recipe ingredients are already in your active shopping list!');
+    }
 }

@@ -1,85 +1,34 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
-  <defs>
-    <!-- Background Gradient -->
-    <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#10B981" />
-      <stop offset="100%" stop-color="#047857" />
-    </linearGradient>
-    
-    <!-- Apple Gradient -->
-    <linearGradient id="appleGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" stop-color="#EF4444" />
-      <stop offset="100%" stop-color="#B91C1C" />
-    </linearGradient>
+    <defs>
+        <linearGradient id="logo-bg-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#1F2937" />
+            <stop offset="100%" stop-color="#111827" />
+        </linearGradient>
+        <filter id="neon-glow" x="-20%" y="-20%" width="140%" height="140%">
+            <feGaussianBlur stdDeviation="8" result="blur" />
+            <feMerge>
+                <feMergeNode in="blur" />
+                <feMergeNode in="SourceGraphic" />
+            </feMerge>
+        </filter>
+    </defs>
 
-    <!-- Leaf Gradient -->
-    <linearGradient id="leafGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#6EE7B7" />
-      <stop offset="100%" stop-color="#34D399" />
-    </linearGradient>
+    <!-- Dark rounded background matching the glassmorphic card -->
+    <rect width="512" height="512" rx="110" fill="url(#logo-bg-grad)" stroke="#374151" stroke-width="8" />
 
-    <!-- Drop Shadow for Basket -->
-    <filter id="dropShadow" x="-10%" y="-10%" width="130%" height="130%">
-      <feDropShadow dx="0" dy="12" stdDeviation="16" flood-color="#022C22" flood-opacity="0.4" />
-    </filter>
-    
-    <!-- Soft Glow for Inner Bezel -->
-    <linearGradient id="bezelGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#A7F3D0" stop-opacity="0.4" />
-      <stop offset="100%" stop-color="#059669" stop-opacity="0.1" />
-    </linearGradient>
-  </defs>
-
-  <!-- Background Squircle -->
-  <rect x="36" y="36" width="440" height="440" rx="90" ry="90" fill="url(#bgGradient)" />
-  
-  <!-- Inner Glow Bezel -->
-  <rect x="52" y="52" width="408" height="408" rx="78" ry="78" fill="none" stroke="url(#bezelGradient)" stroke-width="4" />
-
-  <!-- Main Icon Group (with drop shadow) -->
-  <g filter="url(#dropShadow)">
-    
-    <!-- Stylized Apple -->
-    <!-- Left lobe -->
-    <circle cx="236" cy="245" r="40" fill="url(#appleGradient)" />
-    <!-- Right lobe -->
-    <circle cx="276" cy="245" r="40" fill="url(#appleGradient)" />
-    <!-- Smooth bottom taper -->
-    <path d="M 200 250 C 200 300, 230 305, 256 305 C 282 305, 312 300, 312 250 Z" fill="url(#appleGradient)" />
-    
-    <!-- Apple Stem -->
-    <path d="M 256 215 Q 262 195, 272 190" fill="none" stroke="#78350F" stroke-width="5" stroke-linecap="round" />
-    
-    <!-- Apple Leaf -->
-    <path d="M 268 190 C 285 175, 305 185, 300 205 C 285 215, 270 205, 268 190 Z" fill="url(#leafGradient)" />
-
-    <!-- Basket Handle -->
-    <path d="M 170 230 A 86 86 0 0 1 342 230" fill="none" stroke="#FFFFFF" stroke-width="8" stroke-linecap="round" />
-    
-    <!-- Handle Joint Pins -->
-    <circle cx="170" cy="232" r="4" fill="#E5E7EB" />
-    <circle cx="342" cy="232" r="4" fill="#E5E7EB" />
-
-    <!-- Basket Rim -->
-    <rect x="140" y="230" width="232" height="20" rx="10" ry="10" fill="#FFFFFF" />
-
-    <!-- Basket Body (Trapezoid container) -->
-    <!-- Draw body backplate with slight transparency -->
-    <path d="M 152 250 L 360 250 L 340 335 C 338 345, 330 350, 320 350 L 192 350 C 182 350, 174 345, 172 335 Z" fill="#D1FAE5" fill-opacity="0.9" />
-
-    <!-- Horizontal wire cutouts (simulated by overlaying dark green lines) -->
-    <line x1="156" y1="275" x2="356" y2="275" stroke="#047857" stroke-width="5" stroke-opacity="0.8" />
-    <line x1="162" y1="300" x2="350" y2="300" stroke="#047857" stroke-width="5" stroke-opacity="0.8" />
-    <line x1="168" y1="325" x2="344" y2="325" stroke="#047857" stroke-width="5" stroke-opacity="0.8" />
-
-    <!-- Vertical wire cutouts -->
-    <line x1="185" y1="250" x2="198" y2="350" stroke="#047857" stroke-width="5" stroke-opacity="0.8" />
-    <line x1="220" y1="250" x2="229" y2="350" stroke="#047857" stroke-width="5" stroke-opacity="0.8" />
-    <line x1="256" y1="250" x2="256" y2="350" stroke="#047857" stroke-width="5" stroke-opacity="0.8" />
-    <line x1="292" y1="250" x2="283" y2="350" stroke="#047857" stroke-width="5" stroke-opacity="0.8" />
-    <line x1="327" y1="250" x2="314" y2="350" stroke="#047857" stroke-width="5" stroke-opacity="0.8" />
-
-    <!-- Bottom Rim ground -->
-    <rect x="188" y="344" width="136" height="8" rx="4" ry="4" fill="#FFFFFF" />
-  </g>
+    <!-- Neon outline glow -->
+    <g filter="url(#neon-glow)">
+        <!-- Shopping Cart Basket + Chassis Path -->
+        <path d="M 120,160 L 150,320 L 350,320 L 390,200 L 180,200" fill="none" stroke="#10B981" stroke-width="24" stroke-linecap="round" stroke-linejoin="round" />
+        
+        <!-- Shopping Cart Handle -->
+        <path d="M 120,160 L 90,140" fill="none" stroke="#10B981" stroke-width="24" stroke-linecap="round" />
+        
+        <!-- Big Number 1 merged inside the cart -->
+        <path d="M 220,160 L 260,130 L 260,290" fill="none" stroke="#10B981" stroke-width="28" stroke-linecap="round" stroke-linejoin="round" />
+        
+        <!-- Cart Wheels -->
+        <circle cx="180" cy="385" r="28" fill="#10B981" />
+        <circle cx="320" cy="385" r="28" fill="#10B981" />
+    </g>
 </svg>
